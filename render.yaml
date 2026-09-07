@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: dhl-shipping-express-backend
+    env: node
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && node src/server.js
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: MONGODB_URI
+        sync: false
+      - key: ADMIN_EMAIL
+        value: admin@dhl.com
+      - key: ADMIN_PASSWORD
+        value: admin123
+      - key: PORTAL_DOMAIN
+        value: dhlglobaltracking.com
+      - key: FROM_EMAIL
+        value: DHL Express Support <support@dhlglobaltracking.com>
+      - key: RESEND_API_KEY
+        sync: false
