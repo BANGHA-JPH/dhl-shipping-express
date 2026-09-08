@@ -1653,7 +1653,7 @@ export default function App() {
       {/* 🚀 Dynamic Header - Hidden on the Login Page */}
       {activeTab !== 'login' && (
         (user && activeTab !== 'home') ? (
-          <header className="main-header select-none">
+          <header className="main-header with-sidebar select-none">
             <button 
               className="btn-mobile-menu"
               onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
@@ -1699,14 +1699,14 @@ export default function App() {
                 </div>
                 <img 
                   className="profile-avatar-circle" 
-                  src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&fit=crop&q=80"
+                  src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&fit=crop&q=80" 
                   alt="User Profile" 
                 />
               </div>
             )}
           </header>
         ) : (
-          <header className="main-header">
+          <header className="main-header landing-header">
             <div className="header-branding" onClick={() => window.location.hash = '#home'}>
               <div className="logo-dhl">DHL</div>
               <span className="portal-title">Express Logistics</span>
@@ -1861,24 +1861,6 @@ export default function App() {
                 <div className="hero-visual-col">
                   <div className="hero-main-img-card">
                     <img className="hero-main-img" src="/hero-bg-2.jpg" alt="Warehouse logistics hub" />
-                    
-                    <div className="image-text-overlay">
-                      <div className="overlay-title">GLOBAL LOGISTICS</div>
-                      <div className="overlay-desc">Real-time visibility for your supply chain</div>
-                      <button className="btn-overlay-quote">GET A QUOTE</button>
-                    </div>
-
-                    {/* Floating Status card over image */}
-                    <div className="floating-overlay-card">
-                      <div className="float-header-row">
-                        <span className="float-code">Shipment #230248</span>
-                        <span className="float-badge">
-                          <span className="float-green-dot"></span>
-                          <span>ONLINE</span>
-                        </span>
-                      </div>
-                      <div className="float-body">In Transit - London</div>
-                    </div>
                   </div>
                 </div>
               </div>

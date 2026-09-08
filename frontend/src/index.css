@@ -1727,11 +1727,33 @@ body {
 
 /* Header dynamic adjustments */
 .main-header {
-  margin-left: 260px;
+  margin-left: 0;
+  padding: 15px 50px !important;
+  height: 75px !important;
+  z-index: 2000 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.main-header.with-sidebar {
+  margin-left: 260px !important;
   padding: 15px 40px !important;
   height: 80px !important;
-  z-index: 2000 !important;
   width: calc(100% - 260px) !important;
+}
+
+.main-header.landing-header {
+  margin-left: 0 !important;
+  width: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  top: 0 !important;
+  position: sticky !important;
+  padding: 15px 50px !important;
+  background-color: #ffffff !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05) !important;
+  box-sizing: border-box !important;
 }
 
 /* If user is logged in, sidebar layout is active */
