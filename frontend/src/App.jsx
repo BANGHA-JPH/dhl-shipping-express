@@ -852,16 +852,9 @@ const getValidSession = () => {
     if (!savedStr) return null;
     const saved = JSON.parse(savedStr);
 
-    // Rule: Admin must log in EVERY time (never persist Admin sessions in localStorage across browser visits)
-    if (saved.role === 'admin') {
-      localStorage.removeItem('dhl_user');
-      localStorage.removeItem('ups_user');
-      return null;
-    }
-
-    // Rule: Client (Customer) session saved for 24 hours (24 * 60 * 60 * 1000 ms)
-    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-    if (saved.loginTimestamp && (Date.now() - saved.loginTimestamp > TWENTY_FOUR_HOURS_MS)) {
+    // Persist active session across browser refreshes for 7 days (7 * 24 * 60 * 60 * 1000 ms)
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    if (saved.loginTimestamp && (Date.now() - saved.loginTimestamp > SEVEN_DAYS_MS)) {
       localStorage.removeItem('dhl_user');
       localStorage.removeItem('ups_user');
       return null;
@@ -1157,20 +1150,14 @@ export default function App() {
       if (!res.ok) {
         setLoginError(data.error || 'Login authorization fail.');
       } else {
-        if (data.role === 'admin') {
-          localStorage.removeItem('dhl_user');
-          localStorage.removeItem('ups_user');
-          setUser(data);
-          userRef.current = data;
-        } else {
-          const clientSession = {
-            ...data,
-            loginTimestamp: Date.now()
-          };
-          localStorage.setItem('dhl_user', JSON.stringify(clientSession));
-          setUser(clientSession);
-          userRef.current = clientSession;
-        }
+        const sessionData = {
+          ...data,
+          loginTimestamp: Date.now()
+        };
+        localStorage.setItem('dhl_user', JSON.stringify(sessionData));
+        setUser(sessionData);
+        userRef.current = sessionData;
+
         const targetTab = data.role === 'admin' ? 'admin' : 'dashboard';
         setActiveTab(targetTab);
         window.location.hash = `#${targetTab}`;
@@ -1212,20 +1199,13 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok) {
-        if (data.role === 'admin') {
-          localStorage.removeItem('dhl_user');
-          localStorage.removeItem('ups_user');
-          setUser(data);
-          userRef.current = data;
-        } else {
-          const clientSession = {
-            ...data,
-            loginTimestamp: Date.now()
-          };
-          localStorage.setItem('dhl_user', JSON.stringify(clientSession));
-          setUser(clientSession);
-          userRef.current = clientSession;
-        }
+        const sessionData = {
+          ...data,
+          loginTimestamp: Date.now()
+        };
+        localStorage.setItem('dhl_user', JSON.stringify(sessionData));
+        setUser(sessionData);
+        userRef.current = sessionData;
         window.location.hash = role === 'admin' ? '#admin' : '#dashboard';
       }
     } catch (e) {
