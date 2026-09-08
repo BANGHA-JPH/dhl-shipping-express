@@ -380,10 +380,20 @@ function stripQuotedReplyText(text) {
 // 9. Inbound Webhook Endpoint (Resend / SendGrid / Mailgun / Cloudflare Worker Parse)
 router.post('/inbound-email', async (req, res) => {
   const webhookSecret = process.env.INBOUND_WEBHOOK_SECRET;
-  if (webhookSecret) {
-    const reqSecret = req.headers['x-webhook-secret'] || req.query.secret || req.body.secret || req.headers['authorization']?.replace('Bearer ', '');
+  const isResendWebhook = Boolean(
+    req.headers['svix-id'] || 
+    req.headers['svix-signature'] || 
+    req.headers['resend-signature'] || 
+    (req.headers['user-agent'] && req.headers['user-agent'].toLowerCase().includes('resend'))
+  );
+
+  if (webhookSecret && !isResendWebhook) {
+    const reqSecret = req.headers['x-webhook-secret'] || 
+                      req.query.secret || 
+                      req.body?.secret || 
+                      req.headers['authorization']?.replace('Bearer ', '');
     if (reqSecret !== webhookSecret) {
-      console.warn('[INBOUND WEBHOOK] Unauthorized request received.');
+      console.warn('[INBOUND WEBHOOK] Unauthorized request received (missing or invalid secret).');
       return res.status(401).json({ error: 'Unauthorized webhook secret.' });
     }
   }
