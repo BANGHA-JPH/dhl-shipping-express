@@ -494,11 +494,12 @@ const EmailCenterView = ({ shipments, API_BASE }) => {
   );
 };
 
-const MessagesView = ({ messages, API_BASE, onMarkRead }) => {
+const MessagesView = ({ messages, API_BASE, onMarkRead, onRefresh }) => {
   const [selectedEmail, setSelectedEmail] = useState('');
   const [replyBody, setReplyBody] = useState('');
   const [replySubject, setReplySubject] = useState('');
   const [sending, setSending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', text: '' });
   const [filterSearch, setFilterSearch] = useState('');
 
@@ -637,24 +638,56 @@ const MessagesView = ({ messages, API_BASE, onMarkRead }) => {
             Real-time inbound customer inquiries & threaded email responses
           </p>
         </div>
-        <button
-          onClick={handleSimulateInbound}
-          style={{
-            backgroundColor: '#2b6cb0',
-            color: '#ffffff',
-            fontWeight: '700',
-            fontSize: '13px',
-            padding: '8px 16px',
-            borderRadius: '6px',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-        >
-          + Test Inbound Reply
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {onRefresh && (
+            <button
+              onClick={async () => {
+                setRefreshing(true);
+                try {
+                  await onRefresh();
+                } finally {
+                  setTimeout(() => setRefreshing(false), 500);
+                }
+              }}
+              disabled={refreshing}
+              style={{
+                backgroundColor: '#ffffff',
+                color: '#1a202c',
+                fontWeight: '700',
+                fontSize: '13px',
+                padding: '8px 14px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e0',
+                cursor: refreshing ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <RefreshCw style={{ width: '14px', height: '14px', animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+              {refreshing ? 'Updating...' : 'Refresh Inbox'}
+            </button>
+          )}
+          <button
+            onClick={handleSimulateInbound}
+            style={{
+              backgroundColor: '#2b6cb0',
+              color: '#ffffff',
+              fontWeight: '700',
+              fontSize: '13px',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            + Test Inbound Reply
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '20px', minHeight: '650px' }}>
@@ -883,13 +916,19 @@ export default function App() {
 
   const unreadCount = messages.filter(m => m.sender === 'customer' && !m.read).length;
 
-  useEffect(() => {
+  const fetchMessages = () => {
     if (user && user.role === 'admin') {
       fetch(`${API_BASE}/messages`)
         .then(res => res.ok ? res.json() : [])
         .then(data => setMessages(Array.isArray(data) ? data : []))
         .catch(err => console.error('Error fetching messages:', err));
     }
+  };
+
+  useEffect(() => {
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 6000);
+    return () => clearInterval(interval);
   }, [user, activeTab]);
 
   useEffect(() => {
@@ -3767,6 +3806,7 @@ export default function App() {
             <MessagesView 
               messages={messages} 
               API_BASE={API_BASE} 
+              onRefresh={fetchMessages}
               onMarkRead={async (email) => {
                 try {
                   await fetch(`${API_BASE}/messages/read`, {

@@ -426,8 +426,34 @@ router.post('/inbound-email', async (req, res) => {
     }
 
     // Extract Subject & Body
-    const subject = payload.subject || payload.headers?.Subject || payload.headers?.subject || 'Customer Inquiry';
+    let subject = payload.subject || payload.headers?.Subject || payload.headers?.subject || 'Customer Inquiry';
     let rawBody = payload.text || payload['stripped-text'] || payload.body || payload.html || '';
+
+    // If body is missing but email ID exists (Resend email.received sends metadata only), fetch full body from Resend
+    const resendEmailId = payload.email_id || payload.emailId || payload.id;
+    if ((!rawBody || !String(rawBody).trim()) && resendEmailId && process.env.RESEND_API_KEY) {
+      try {
+        const { Resend } = await import('resend');
+        const resendClient = new Resend(process.env.RESEND_API_KEY);
+        let emailContent = null;
+        if (resendClient.emails?.receiving?.get) {
+          const resendRes = await resendClient.emails.receiving.get(resendEmailId);
+          emailContent = resendRes.data || resendRes;
+        } else if (resendClient.emails?.get) {
+          const resendRes = await resendClient.emails.get(resendEmailId);
+          emailContent = resendRes.data || resendRes;
+        }
+        if (emailContent) {
+          rawBody = emailContent.text || emailContent.html || emailContent.body || '';
+          if (emailContent.subject && subject === 'Customer Inquiry') {
+            subject = emailContent.subject;
+          }
+        }
+      } catch (err) {
+        console.warn('[INBOUND WEBHOOK] Could not retrieve email body from Resend receiving API:', err.message);
+      }
+    }
+
     if (typeof rawBody !== 'string') rawBody = String(rawBody);
 
     // Strip HTML tags if body contains HTML
@@ -439,7 +465,8 @@ router.post('/inbound-email', async (req, res) => {
                        .replace(/<[^>]+>/g, '');
     }
 
-    const cleanBody = stripQuotedReplyText(rawBody) || 'Empty message body.';
+    const stripped = stripQuotedReplyText(rawBody);
+    const cleanBody = stripped || rawBody.trim() || 'New message received from customer.';
 
     // Extract Message-ID & In-Reply-To
     const messageId = payload['message-id'] || payload.messageId || payload.headers?.['message-id'] || payload.id || `<msg-inbound-${Date.now()}@${domain}>`;
