@@ -41,6 +41,7 @@ const messageSchema = new mongoose.Schema({
   subject: { type: String, default: 'No Subject' },
   body: { type: String, required: true },
   sender: { type: String, required: true, enum: ['customer', 'admin'] },
+  channel: { type: String, enum: ['email', 'insite'], default: 'email', index: true },
   read: { type: Boolean, default: false },
   messageId: { type: String },
   inReplyTo: { type: String }
@@ -419,11 +420,13 @@ class MockMessage {
     Object.assign(this, data);
     this.read = this.read !== undefined ? this.read : false;
     this.sender = this.sender || 'customer';
+    this.channel = this.channel || 'email';
   }
   async save() {
     loadDb();
     if (!this.customerEmail) throw new Error('Message validation failed: customerEmail required.');
     this.customerEmail = this.customerEmail.trim().toLowerCase();
+    this.channel = this.channel || 'email';
     this.createdAt = this.createdAt || new Date().toISOString();
     this.updatedAt = new Date().toISOString();
     this._id = this._id || 'msg_' + Math.random().toString(36).substr(2, 9);
@@ -456,6 +459,13 @@ class MockMessage {
     dbState.messages = dbState.messages || [];
     let results = [...dbState.messages];
     if (query) {
+      if (query.channel) {
+        if (typeof query.channel === 'object' && query.channel.$ne) {
+          results = results.filter(m => (m.channel || 'email') !== query.channel.$ne);
+        } else {
+          results = results.filter(m => (m.channel || 'email') === query.channel);
+        }
+      }
       if (query.customerEmail) {
         const email = String(query.customerEmail).toLowerCase().trim();
         results = results.filter(m => m.customerEmail === email);

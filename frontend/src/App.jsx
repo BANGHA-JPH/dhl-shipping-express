@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { 
   Truck, Plane, Ship, Activity, ClipboardList, PlusCircle, CheckCircle, 
   MapPin, LogOut, ArrowRight, Eye, EyeOff, Shield, Users, Package, RefreshCw, Mail, Lock,
-  SlidersHorizontal, Download, Printer, Search, Trash, MessageSquare
+  SlidersHorizontal, Download, Printer, Search, Trash, MessageSquare, MessageCircle, Send, User
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 
@@ -878,6 +878,725 @@ const MessagesView = ({ messages, API_BASE, onMarkRead, onRefresh }) => {
   );
 };
 
+const CustomerChatView = ({ user, insiteMessages, API_BASE, onRefresh }) => {
+  const [inputText, setInputText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  const thread = React.useMemo(() => {
+    return (insiteMessages || [])
+      .filter(m => (m.customerEmail || '').toLowerCase().trim() === userEmail)
+      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+  }, [insiteMessages, userEmail]);
+
+  // Mark admin messages as read when customer views the tab
+  useEffect(() => {
+    if (!userEmail) return;
+    const hasUnread = thread.some(m => m.sender === 'admin' && !m.read);
+    if (hasUnread) {
+      fetch(`${API_BASE}/insite-messages/read`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerEmail: userEmail, reader: 'customer' })
+      }).catch(err => console.error('Error marking in-site read:', err));
+    }
+  }, [thread, userEmail, API_BASE]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thread]);
+
+  const handleSend = async (textToSend) => {
+    const text = (typeof textToSend === 'string' ? textToSend : inputText).trim();
+    if (!text || sending) return;
+
+    setSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/insite-messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerEmail: userEmail,
+          customerName: user?.name || userEmail.split('@')[0],
+          body: text,
+          sender: 'customer'
+        })
+      });
+      if (res.ok) {
+        setInputText('');
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      console.error('Error sending in-site message:', err);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const quickPrompts = [
+    "What is the current status of my shipment?",
+    "Need assistance with customs clearance documents",
+    "Can I request a delivery appointment time?",
+    "Please update my delivery address"
+  ];
+
+  return (
+    <section className="customer-chat-view" style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto' }}>
+      {/* Header Banner */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1a1a1a 0%, #2a2521 100%)',
+        border: '1px solid #3a322c',
+        borderRadius: '12px',
+        padding: '20px 24px',
+        marginBottom: '20px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '16px',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            backgroundColor: '#FFCC00',
+            color: '#D40511',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: '900',
+            fontSize: '18px',
+            boxShadow: '0 2px 8px rgba(255, 204, 0, 0.3)'
+          }}>
+            DHL
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', margin: 0 }}>
+                Logistics Support Chat
+              </h2>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                color: '#4ade80',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                fontSize: '11px',
+                fontWeight: '700',
+                padding: '2px 8px',
+                borderRadius: '12px'
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e', display: 'inline-block' }} />
+                Online
+              </span>
+            </div>
+            <p style={{ color: '#a0aec0', fontSize: '13px', margin: '4px 0 0 0' }}>
+              Chat directly with our central operations dispatch team in real-time.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={async () => {
+            setRefreshing(true);
+            try {
+              if (onRefresh) await onRefresh();
+            } finally {
+              setTimeout(() => setRefreshing(false), 400);
+            }
+          }}
+          disabled={refreshing}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.08)',
+            color: '#cbd5e1',
+            fontWeight: '600',
+            fontSize: '12px',
+            padding: '8px 14px',
+            borderRadius: '6px',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            cursor: refreshing ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <RefreshCw style={{ width: '13px', height: '13px', animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+          {refreshing ? 'Syncing...' : 'Sync Chat'}
+        </button>
+      </div>
+
+      {/* Main Chat Container */}
+      <div style={{
+        background: '#ffffff',
+        borderRadius: '12px',
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '620px',
+        overflow: 'hidden'
+      }}>
+        {/* Messages Scroll Area */}
+        <div style={{
+          flex: 1,
+          padding: '24px',
+          overflowY: 'auto',
+          backgroundColor: '#f8fafc',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          {thread.length === 0 ? (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: 1,
+              textAlign: 'center',
+              padding: '20px'
+            }}>
+              <div style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                backgroundColor: '#fff4cc',
+                color: '#b7791f',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px'
+              }}>
+                <MessageCircle size={30} />
+              </div>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1a202c', margin: '0 0 6px 0' }}>
+                Welcome to DHL Direct Support
+              </h3>
+              <p style={{ color: '#718096', fontSize: '14px', maxWidth: '420px', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+                Send a message below to connect directly with a DHL logistics specialist. We can assist with tracking, customs, or delivery instructions.
+              </p>
+
+              {/* Quick Prompts */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxWidth: '520px' }}>
+                {quickPrompts.map((prompt, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSend(prompt)}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #cbd5e0',
+                      borderRadius: '20px',
+                      padding: '8px 14px',
+                      fontSize: '12px',
+                      color: '#2d3748',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#D40511';
+                      e.currentTarget.style.color = '#D40511';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = '#cbd5e0';
+                      e.currentTarget.style.color = '#2d3748';
+                    }}
+                  >
+                    💬 {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            thread.map((m, idx) => {
+              const isMe = m.sender === 'customer';
+              return (
+                <div
+                  key={m._id || idx}
+                  style={{
+                    alignSelf: isMe ? 'flex-end' : 'flex-start',
+                    maxWidth: '75%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: isMe ? 'flex-end' : 'flex-start'
+                  }}
+                >
+                  <div style={{
+                    fontSize: '11px',
+                    color: '#718096',
+                    marginBottom: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <span style={{ fontWeight: '700', color: isMe ? '#2d3748' : '#D40511' }}>
+                      {isMe ? 'You' : 'DHL Support Agent'}
+                    </span>
+                    <span>•</span>
+                    <span>{new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+
+                  <div style={{
+                    backgroundColor: isMe ? '#D40511' : '#ffffff',
+                    color: isMe ? '#ffffff' : '#1a202c',
+                    padding: '12px 18px',
+                    borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
+                    border: isMe ? '1px solid #B8040E' : '1px solid #e2e8f0',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                    wordBreak: 'break-word',
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {m.body}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Bar */}
+        <div style={{
+          padding: '16px 20px',
+          borderTop: '1px solid #edf2f7',
+          backgroundColor: '#ffffff'
+        }}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+            style={{ display: 'flex', gap: '10px', alignItems: 'center' }}
+          >
+            <input
+              type="text"
+              placeholder="Type your message to DHL Support... (Press Enter to send)"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              disabled={sending}
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e0',
+                fontSize: '14px',
+                outline: 'none',
+                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)'
+              }}
+            />
+            <button
+              type="submit"
+              disabled={sending || !inputText.trim()}
+              style={{
+                backgroundColor: '#D40511',
+                color: '#ffffff',
+                fontWeight: '700',
+                fontSize: '14px',
+                padding: '12px 22px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: (sending || !inputText.trim()) ? 'not-allowed' : 'pointer',
+                opacity: (sending || !inputText.trim()) ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'background 0.15s ease'
+              }}
+            >
+              <Send size={16} />
+              {sending ? 'Sending...' : 'Send'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const AdminInsiteChatView = ({ insiteMessages, API_BASE, onRefresh }) => {
+  const [selectedEmail, setSelectedEmail] = useState('');
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+  const messagesEndRef = useRef(null);
+
+  // Group in-site messages by customerEmail
+  const conversations = React.useMemo(() => {
+    const groups = {};
+    (insiteMessages || []).forEach(m => {
+      const email = (m.customerEmail || 'unknown@dhl.com').toLowerCase().trim();
+      if (!groups[email]) {
+        groups[email] = {
+          email,
+          name: (m.sender === 'customer' && m.customerName) ? m.customerName : email.split('@')[0],
+          messages: [],
+          unreadCount: 0,
+          lastMsg: m
+        };
+      }
+      if (m.sender === 'customer' && m.customerName && groups[email].name === email.split('@')[0]) {
+        groups[email].name = m.customerName;
+      }
+      groups[email].messages.push(m);
+      if (m.sender === 'customer' && !m.read) {
+        groups[email].unreadCount += 1;
+      }
+      const existingTime = new Date(groups[email].lastMsg.createdAt || 0).getTime();
+      const thisTime = new Date(m.createdAt || 0).getTime();
+      if (thisTime > existingTime) {
+        groups[email].lastMsg = m;
+      }
+    });
+
+    return Object.values(groups).sort((a, b) => {
+      const timeA = new Date(a.lastMsg.createdAt || 0).getTime();
+      const timeB = new Date(b.lastMsg.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [insiteMessages]);
+
+  useEffect(() => {
+    if (conversations.length > 0 && !selectedEmail) {
+      setSelectedEmail(conversations[0].email);
+    }
+  }, [conversations, selectedEmail]);
+
+  // Mark customer messages as read when admin selects customer
+  useEffect(() => {
+    if (!selectedEmail) return;
+    const target = conversations.find(c => c.email === selectedEmail);
+    if (target && target.unreadCount > 0) {
+      fetch(`${API_BASE}/insite-messages/read`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerEmail: selectedEmail, reader: 'admin' })
+      }).catch(err => console.error('Error marking in-site read:', err));
+    }
+  }, [selectedEmail, conversations, API_BASE]);
+
+  const activeConv = conversations.find(c => c.email === selectedEmail);
+  const activeMessages = React.useMemo(() => {
+    if (!activeConv) return [];
+    return [...activeConv.messages].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+  }, [activeConv]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeMessages]);
+
+  const handleSendReply = async (textToSend) => {
+    const body = (typeof textToSend === 'string' ? textToSend : replyText).trim();
+    if (!selectedEmail || !body || sending) return;
+
+    setSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/insite-messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerEmail: selectedEmail,
+          customerName: 'DHL Logistics Support',
+          body,
+          sender: 'admin'
+        })
+      });
+      if (res.ok) {
+        setReplyText('');
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      console.error('Error sending in-site reply:', err);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const filteredConversations = conversations.filter(c => 
+    c.email.toLowerCase().includes(filterSearch.toLowerCase()) || 
+    c.name.toLowerCase().includes(filterSearch.toLowerCase())
+  );
+
+  const quickReplies = [
+    "Hello! We are currently checking your shipment status with dispatch.",
+    "Your shipment has cleared customs and is on schedule.",
+    "Delivery is scheduled for today before 6:00 PM.",
+    "Please provide an alternative recipient phone number."
+  ];
+
+  return (
+    <section className="admin-insite-messages-view" style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1a202c', margin: 0 }}>
+              In-Site Customer Chat
+            </h2>
+            <span style={{
+              backgroundColor: '#FFCC00',
+              color: '#000000',
+              fontSize: '11px',
+              fontWeight: '800',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              letterSpacing: '0.5px'
+            }}>
+              LIVE PORTAL
+            </span>
+          </div>
+          <p style={{ color: '#718096', fontSize: '14px', margin: '4px 0 0 0' }}>
+            Real-time direct messaging with registered portal customers (distinct from inbound emails)
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {onRefresh && (
+            <button
+              onClick={async () => {
+                setRefreshing(true);
+                try {
+                  await onRefresh();
+                } finally {
+                  setTimeout(() => setRefreshing(false), 500);
+                }
+              }}
+              disabled={refreshing}
+              style={{
+                backgroundColor: '#ffffff',
+                color: '#1a202c',
+                fontWeight: '700',
+                fontSize: '13px',
+                padding: '8px 14px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e0',
+                cursor: refreshing ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <RefreshCw style={{ width: '14px', height: '14px', animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+              {refreshing ? 'Updating...' : 'Refresh Chats'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '20px', minHeight: '650px' }}>
+        {/* Left Column: Customer Conversations */}
+        <div style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '16px', borderBottom: '1px solid #edf2f7', background: '#f8fafc' }}>
+            <input 
+              type="text"
+              placeholder="Search customers..."
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '13px', outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {filteredConversations.length === 0 ? (
+              <div style={{ padding: '32px', textAlign: 'center', color: '#a0aec0', fontSize: '14px' }}>
+                No in-site chat conversations yet.
+              </div>
+            ) : (
+              filteredConversations.map(conv => {
+                const isSelected = conv.email === selectedEmail;
+                return (
+                  <div
+                    key={conv.email}
+                    onClick={() => setSelectedEmail(conv.email)}
+                    style={{
+                      padding: '14px 16px',
+                      borderBottom: '1px solid #edf2f7',
+                      cursor: 'pointer',
+                      backgroundColor: isSelected ? '#edf2f7' : (conv.unreadCount > 0 ? '#fffaf0' : '#ffffff'),
+                      transition: 'background 0.15s ease',
+                      borderLeft: isSelected ? '4px solid #D40511' : '4px solid transparent'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '700', fontSize: '14px', color: '#2d3748', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
+                        {conv.name}
+                      </span>
+                      {conv.unreadCount > 0 && (
+                        <span style={{ backgroundColor: '#D40511', color: '#fff', fontSize: '11px', fontWeight: '800', padding: '2px 6px', borderRadius: '10px' }}>
+                          {conv.unreadCount} NEW
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#718096', marginBottom: '4px', fontFamily: 'monospace' }}>
+                      {conv.email}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#4a5568', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {conv.lastMsg.body ? conv.lastMsg.body.substring(0, 45) + '...' : 'Message received'}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Chat Feed & Reply Form */}
+        <div style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {!activeConv ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#a0aec0' }}>
+              Select a customer from the left to view live chat.
+            </div>
+          ) : (
+            <>
+              {/* Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid #edf2f7',
+                background: '#1a1a1a',
+                color: '#ffffff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#FFCC00' }}>
+                    {activeConv.name}
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#cbd5e1', fontFamily: 'monospace' }}>
+                    {activeConv.email}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: '4px' }}>
+                    {activeMessages.length} messages
+                  </span>
+                </div>
+              </div>
+
+              {/* Message Feed */}
+              <div style={{
+                flex: 1,
+                padding: '20px',
+                overflowY: 'auto',
+                background: '#f7fafc',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}>
+                {activeMessages.map((m, index) => {
+                  const isAdmin = m.sender === 'admin';
+                  return (
+                    <div
+                      key={m._id || index}
+                      style={{
+                        alignSelf: isAdmin ? 'flex-end' : 'flex-start',
+                        maxWidth: '75%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: isAdmin ? 'flex-end' : 'flex-start'
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontWeight: '700', color: isAdmin ? '#D40511' : '#2b6cb0' }}>
+                          {isAdmin ? 'DHL Logistics Support (You)' : (m.customerName || activeConv.name)}
+                        </span>
+                        <span>•</span>
+                        <span>{new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div
+                        style={{
+                          background: isAdmin ? '#D40511' : '#ffffff',
+                          color: isAdmin ? '#ffffff' : '#1A1A1A',
+                          padding: '12px 16px',
+                          borderRadius: isAdmin ? '12px 12px 0 12px' : '12px 12px 12px 0',
+                          border: isAdmin ? '1px solid #B8040E' : '1px solid #e2e8f0',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                          fontSize: '14px',
+                          lineHeight: '1.5',
+                          whiteSpace: 'pre-wrap'
+                        }}
+                      >
+                        {m.body}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Reply Section */}
+              <div style={{ padding: '16px', borderTop: '1px solid #edf2f7', background: '#ffffff' }}>
+                {/* Quick canned replies */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                  {quickReplies.map((qr, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleSendReply(qr)}
+                      style={{
+                        backgroundColor: '#f1f5f9',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        color: '#475569',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + {qr}
+                    </button>
+                  ))}
+                </div>
+
+                <form onSubmit={(e) => { e.preventDefault(); handleSendReply(); }} style={{ display: 'flex', gap: '10px' }}>
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={`Reply to ${activeConv.name} via portal chat...`}
+                    disabled={sending}
+                    style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px', outline: 'none' }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={sending || !replyText.trim()}
+                    style={{
+                      backgroundColor: '#D40511',
+                      color: '#ffffff',
+                      fontWeight: '700',
+                      fontSize: '14px',
+                      padding: '10px 22px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: (sending || !replyText.trim()) ? 'not-allowed' : 'pointer',
+                      opacity: (sending || !replyText.trim()) ? 0.6 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Send size={15} />
+                    {sending ? 'Sending...' : 'Send Reply'}
+                  </button>
+                </form>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 
 const getValidSession = () => {
   try {
@@ -911,10 +1630,18 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [shipments, setShipments] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [insiteMessages, setInsiteMessages] = useState([]);
   const [isFlashing, setIsFlashing] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  // Email messages unread count for admin
   const unreadCount = messages.filter(m => m.sender === 'customer' && !m.read).length;
+
+  // In-site chat unread counts
+  const adminInsiteUnreadCount = insiteMessages.filter(m => m.sender === 'customer' && !m.read).length;
+  const customerInsiteUnreadCount = (user && user.role === 'customer')
+    ? insiteMessages.filter(m => (m.customerEmail || '').toLowerCase().trim() === (user.email || '').toLowerCase().trim() && m.sender === 'admin' && !m.read).length
+    : 0;
 
   const fetchMessages = () => {
     if (user && user.role === 'admin') {
@@ -925,10 +1652,29 @@ export default function App() {
     }
   };
 
+  const fetchInsiteMessages = () => {
+    if (!user) return;
+    const url = user.role === 'admin'
+      ? `${API_BASE}/insite-messages`
+      : `${API_BASE}/insite-messages?email=${encodeURIComponent(user.email || '')}`;
+    fetch(url)
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setInsiteMessages(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Error fetching in-site messages:', err));
+  };
+
   useEffect(() => {
     fetchMessages();
     const interval = setInterval(fetchMessages, 6000);
     return () => clearInterval(interval);
+  }, [user, activeTab]);
+
+  useEffect(() => {
+    if (user) {
+      fetchInsiteMessages();
+      const interval = setInterval(fetchInsiteMessages, 5000);
+      return () => clearInterval(interval);
+    }
   }, [user, activeTab]);
 
   useEffect(() => {
@@ -1030,7 +1776,7 @@ export default function App() {
       }
 
       // Protected route check
-      if (!currentUser && ['admin', 'dashboard', 'appointment', 'email-center', 'messages'].includes(targetTab)) {
+      if (!currentUser && ['admin', 'dashboard', 'appointment', 'email-center', 'messages', 'insite-messages', 'customer-messages'].includes(targetTab)) {
         setActiveTab('home');
         if (window.location.hash !== '#home') {
           window.location.hash = '#home';
@@ -1151,6 +1897,30 @@ export default function App() {
               if (exists) return prev;
               return [newMsg, ...prev];
             });
+          } else if (msg.type === 'NEW_INSITE_MESSAGE') {
+            const newMsg = msg.payload;
+            setInsiteMessages(prev => {
+              const exists = prev.some(m => m._id === newMsg._id);
+              if (exists) return prev;
+              const currentUsr = userRef.current;
+              if (currentUsr && currentUsr.role === 'customer') {
+                const myEmail = (currentUsr.email || '').toLowerCase().trim();
+                const targetEmail = (newMsg.customerEmail || '').toLowerCase().trim();
+                if (myEmail && targetEmail && myEmail !== targetEmail) {
+                  return prev;
+                }
+              }
+              return [...prev, newMsg];
+            });
+          } else if (msg.type === 'INSITE_MESSAGES_READ') {
+            const { customerEmail, reader } = msg.payload || {};
+            const targetSender = reader === 'customer' ? 'admin' : 'customer';
+            setInsiteMessages(prev => prev.map(m => {
+              if ((m.customerEmail || '').toLowerCase().trim() === (customerEmail || '').toLowerCase().trim() && m.sender === targetSender) {
+                return { ...m, read: true };
+              }
+              return m;
+            }));
           }
         } catch (error) {
           console.warn('Socket message parse error:', error);
@@ -1752,6 +2522,22 @@ export default function App() {
                   >
                     <ClipboardList className="nav-icon" /> Tracking
                   </a>
+                  <a href="#customer-messages" className={`sidebar-link ${activeTab === 'customer-messages' ? 'active' : ''}`}>
+                    <MessageCircle className="nav-icon" /> Support Chat
+                    {customerInsiteUnreadCount > 0 && (
+                      <span style={{
+                        marginLeft: 'auto',
+                        backgroundColor: '#D40511',
+                        color: '#ffffff',
+                        fontSize: '0.7rem',
+                        fontWeight: '800',
+                        padding: '2px 6px',
+                        borderRadius: '10px'
+                      }}>
+                        {customerInsiteUnreadCount}
+                      </span>
+                    )}
+                  </a>
                 </>
               ) : (
                 <>
@@ -1764,8 +2550,24 @@ export default function App() {
                   <a href="#tracking" className={`sidebar-link ${activeTab === 'tracking' ? 'active' : ''}`}>
                     <ClipboardList className="nav-icon" /> Shipments
                   </a>
+                  <a href="#insite-messages" className={`sidebar-link ${activeTab === 'insite-messages' ? 'active' : ''}`}>
+                    <MessageCircle className="nav-icon" /> In-Site Chat
+                    {adminInsiteUnreadCount > 0 && (
+                      <span style={{
+                        marginLeft: 'auto',
+                        backgroundColor: '#D40511',
+                        color: '#ffffff',
+                        fontSize: '0.7rem',
+                        fontWeight: '800',
+                        padding: '2px 6px',
+                        borderRadius: '10px'
+                      }}>
+                        {adminInsiteUnreadCount}
+                      </span>
+                    )}
+                  </a>
                   <a href="#messages" className={`sidebar-link ${activeTab === 'messages' ? 'active' : ''}`}>
-                    <MessageSquare className="nav-icon" /> Messages
+                    <Mail className="nav-icon" /> Email Messages
                     {unreadCount > 0 && (
                       <span style={{
                         marginLeft: 'auto',
@@ -3782,6 +4584,23 @@ export default function App() {
 
           {activeTab === 'email-center' && user?.role === 'admin' && (
             <EmailCenterView shipments={shipments} API_BASE={API_BASE} />
+          )}
+
+          {activeTab === 'insite-messages' && user?.role === 'admin' && (
+            <AdminInsiteChatView
+              insiteMessages={insiteMessages}
+              API_BASE={API_BASE}
+              onRefresh={fetchInsiteMessages}
+            />
+          )}
+
+          {activeTab === 'customer-messages' && user?.role === 'customer' && (
+            <CustomerChatView
+              user={user}
+              insiteMessages={insiteMessages}
+              API_BASE={API_BASE}
+              onRefresh={fetchInsiteMessages}
+            />
           )}
 
           {activeTab === 'messages' && user?.role === 'admin' && (

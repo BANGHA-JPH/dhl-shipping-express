@@ -507,11 +507,11 @@ router.post('/inbound-email', async (req, res) => {
   }
 });
 
-// 10. Get Admin / Customer Messages
+// 10. Get Admin / Customer Messages (Email Messages only)
 router.get('/messages', async (req, res) => {
   const { email } = req.query;
   try {
-    let query = {};
+    let query = { channel: { $ne: 'insite' } };
     if (email) {
       query.customerEmail = email.trim().toLowerCase();
     }
@@ -524,7 +524,7 @@ router.get('/messages', async (req, res) => {
   }
 });
 
-// 11. Admin Reply to Customer Message
+// 11. Admin Reply to Customer Message (via Resend Email)
 router.post('/admin/messages/reply', async (req, res) => {
   const { customerEmail, customerName, subject, body, inReplyTo } = req.body;
 
@@ -541,13 +541,14 @@ router.post('/admin/messages/reply', async (req, res) => {
   try {
     const formattedSubject = subject ? (subject.startsWith('Re:') ? subject : `Re: ${subject}`) : 'Re: Customer Inquiry';
 
-    // 1. Save Admin Message to Database
+    // 1. Save Admin Message to Database (channel: email)
     const adminMsg = new Message({
       customerEmail: cleanEmail,
       customerName: customerName || cleanEmail.split('@')[0],
       subject: formattedSubject,
       body: body.trim(),
       sender: 'admin',
+      channel: 'email',
       read: true,
       messageId: `<msg-admin-${Date.now()}@${domain}>`,
       inReplyTo: inReplyTo || ''
@@ -593,7 +594,7 @@ router.post('/admin/messages/reply', async (req, res) => {
   }
 });
 
-// 12. Mark Customer Messages as Read
+// 12. Mark Customer Email Messages as Read
 router.put('/messages/read', async (req, res) => {
   const { customerEmail } = req.body;
   if (!customerEmail) {
@@ -603,14 +604,110 @@ router.put('/messages/read', async (req, res) => {
   try {
     const cleanEmail = customerEmail.trim().toLowerCase();
     await Message.updateMany(
-      { customerEmail: cleanEmail, sender: 'customer', read: false },
+      { customerEmail: cleanEmail, channel: { $ne: 'insite' }, sender: 'customer', read: false },
       { $set: { read: true } }
     );
 
-    res.json({ success: true, message: `Marked messages from ${cleanEmail} as read.` });
+    res.json({ success: true, message: `Marked email messages from ${cleanEmail} as read.` });
   } catch (error) {
     console.error('Error marking messages as read:', error);
     res.status(500).json({ error: 'Failed to update message read status.' });
+  }
+});
+
+// --- IN-SITE LIVE CHAT ENDPOINTS ---
+
+// 13. Get In-Site Messages (Dedicated In-Site Chat)
+router.get('/insite-messages', async (req, res) => {
+  const { email } = req.query;
+  try {
+    let query = { channel: 'insite' };
+    if (email) {
+      query.customerEmail = email.trim().toLowerCase();
+    }
+    const sortOrder = email ? { createdAt: 1 } : { createdAt: -1 };
+    const messages = await Message.find(query).sort(sortOrder);
+    res.json(messages);
+  } catch (error) {
+    console.error('Error fetching in-site messages:', error);
+    res.status(500).json({ error: 'Failed to retrieve in-site messages.' });
+  }
+});
+
+// 14. Send In-Site Message (Customer or Admin)
+router.post('/insite-messages/send', async (req, res) => {
+  const { customerEmail, customerName, body, sender } = req.body;
+
+  if (!customerEmail || !customerEmail.trim()) {
+    return res.status(400).json({ error: 'Customer email is required.' });
+  }
+  if (!body || !body.trim()) {
+    return res.status(400).json({ error: 'Message body cannot be empty.' });
+  }
+
+  const cleanEmail = customerEmail.trim().toLowerCase();
+  const validSender = sender === 'admin' ? 'admin' : 'customer';
+
+  try {
+    const newMsg = new Message({
+      customerEmail: cleanEmail,
+      customerName: customerName || (validSender === 'admin' ? 'DHL Logistics Support' : cleanEmail.split('@')[0]),
+      subject: 'In-Site Support Chat',
+      body: body.trim(),
+      sender: validSender,
+      channel: 'insite',
+      read: false,
+      messageId: `<insite-${Date.now()}@${cleanEmail}>`
+    });
+
+    await newMsg.save();
+
+    // Broadcast over WebSocket for instant live delivery
+    if (wssInstance) {
+      const msgObj = typeof newMsg.toObject === 'function' ? newMsg.toObject() : newMsg;
+      const wsMessage = JSON.stringify({ type: 'NEW_INSITE_MESSAGE', payload: msgObj });
+      wssInstance.clients.forEach(c => {
+        if (c.readyState === 1) c.send(wsMessage);
+      });
+    }
+
+    res.status(201).json({ success: true, message: newMsg });
+  } catch (error) {
+    console.error('Error sending in-site message:', error);
+    res.status(500).json({ error: error.message || 'Failed to send in-site message.' });
+  }
+});
+
+// 15. Mark In-Site Messages as Read
+router.put('/insite-messages/read', async (req, res) => {
+  const { customerEmail, reader } = req.body;
+  if (!customerEmail) {
+    return res.status(400).json({ error: 'Customer email required.' });
+  }
+
+  const cleanEmail = customerEmail.trim().toLowerCase();
+  const targetSender = reader === 'customer' ? 'admin' : 'customer';
+
+  try {
+    await Message.updateMany(
+      { customerEmail: cleanEmail, channel: 'insite', sender: targetSender, read: false },
+      { $set: { read: true } }
+    );
+
+    if (wssInstance) {
+      const wsMessage = JSON.stringify({
+        type: 'INSITE_MESSAGES_READ',
+        payload: { customerEmail: cleanEmail, reader: reader || 'admin' }
+      });
+      wssInstance.clients.forEach(c => {
+        if (c.readyState === 1) c.send(wsMessage);
+      });
+    }
+
+    res.json({ success: true, message: `Marked in-site messages for ${cleanEmail} as read.` });
+  } catch (error) {
+    console.error('Error marking in-site messages read:', error);
+    res.status(500).json({ error: 'Failed to update in-site message status.' });
   }
 });
 
